@@ -1,0 +1,16 @@
+{
+  "name": "Kiểm kê hàng hoá (có quét mã)",
+  "short_name": "KK Quét mã",
+  "description": "Ứng dụng kiểm kê hàng hoá offline có quét mã vạch - Con Cưng",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F6FA",
+  "theme_color": "#152238",
+  "lang": "vi",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
