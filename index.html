@@ -1439,7 +1439,12 @@ var scanStream = null, scanTrack = null, scanVideo = null, scanRAF = null;
 var scanDecodeBusy = false, torchOn = false;
 var decodeCanvasEl = null;
 
+var scannerOpening = false;
+
 function openScanner(){
+  if(scannerOpening) return; // ignore rapid double-taps while a request is already in flight
+  scannerOpening = true;
+
   var overlay = $("#scannerOverlay");
   overlay.classList.remove("found");
   overlay.classList.add("show");
@@ -1455,32 +1460,51 @@ function openScanner(){
 
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     $("#scanStatus").textContent = "Trình duyệt không hỗ trợ camera.";
+    scannerOpening = false;
     return;
   }
 
-  navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
-    audio: false
-  }).then(function(stream){
-    scanStream = stream;
-    scanTrack = stream.getVideoTracks()[0];
-    scanVideo = document.createElement("video");
-    scanVideo.setAttribute("playsinline", "");
-    scanVideo.setAttribute("muted", "");
-    scanVideo.muted = true;
-    scanVideo.srcObject = stream;
-    var playPromise = scanVideo.play();
-    if(playPromise && playPromise.catch) playPromise.catch(function(){});
+  // Fully release any camera session still lingering from a previous scan before
+  // requesting a new one - iOS Safari can otherwise appear to "freeze" for a few
+  // seconds if a new getUserMedia call races the hardware releasing the old stream.
+  stopScanStream();
 
-    $("#scanStatus").textContent = "";
-    try{ scanTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] }); }catch(e){}
-    setupTorchButton();
+  function requestCamera(){
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    }).then(function(stream){
+      if(!overlay.classList.contains("show")){
+        // user closed the scanner while permission/hardware was still being acquired
+        stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
+        scannerOpening = false;
+        return;
+      }
+      scanStream = stream;
+      scanTrack = stream.getVideoTracks()[0];
+      scanVideo = document.createElement("video");
+      scanVideo.setAttribute("playsinline", "");
+      scanVideo.setAttribute("muted", "");
+      scanVideo.muted = true;
+      scanVideo.srcObject = stream;
+      var playPromise = scanVideo.play();
+      if(playPromise && playPromise.catch) playPromise.catch(function(){});
 
-    scanVideo.addEventListener("loadedmetadata", function(){ startScanLoop(); }, { once: true });
-  }).catch(function(err){
-    $("#scanStatus").textContent = "Không mở được camera. Kiểm tra quyền truy cập camera cho trình duyệt.";
-    console.error(err);
-  });
+      $("#scanStatus").textContent = "";
+      try{ scanTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] }); }catch(e){}
+      setupTorchButton();
+
+      scanVideo.addEventListener("loadedmetadata", function(){ startScanLoop(); }, { once: true });
+      scannerOpening = false;
+    }).catch(function(err){
+      $("#scanStatus").textContent = "Không mở được camera. Kiểm tra quyền truy cập camera cho trình duyệt.";
+      console.error(err);
+      scannerOpening = false;
+    });
+  }
+  // A short delay gives the previous stream's tracks time to actually release the
+  // hardware before we ask for a new one - this is the main fix for the freeze.
+  setTimeout(requestCamera, 120);
 }
 
 var scanDisplayMap = null; // cached {scale, offsetX, offsetY, crop:{x,y,w,h}}
@@ -1589,8 +1613,10 @@ function closeScanner(){
   var overlay = $("#scannerOverlay");
   overlay.classList.remove("show");
   overlay.classList.remove("found");
+  scannerOpening = false;
   stopScanStream();
 }
+$("#btnCloseScan").addEventListener("click", closeScanner);
 
 function setupTorchButton(){
   try{
