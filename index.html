@@ -1483,15 +1483,35 @@ function openScanner(){
   });
 }
 
-function computeCrop(vw, vh){
-  var cropW = Math.round(vw * 0.96);
-  var cropH = Math.round(cropW / 2.4);
-  if(cropH > vh){ cropH = vh; }
-  cropW = Math.min(cropW, vw);
-  cropH = Math.min(cropH, vh);
-  var cropX = Math.round((vw - cropW) / 2);
-  var cropY = Math.round((vh - cropH) / 2);
-  return { x: cropX, y: cropY, w: cropW, h: cropH };
+var scanDisplayMap = null; // cached {scale, offsetX, offsetY, crop:{x,y,w,h}}
+
+function computeDisplayAndGuideMap(vw, vh, canvas){
+  var scale = Math.max(canvas.width / vw, canvas.height / vh);
+  var offsetX = (canvas.width - vw * scale) / 2;
+  var offsetY = (canvas.height - vh * scale) / 2;
+
+  var guideEl = $("#scanFrame");
+  var canvasRect = canvas.getBoundingClientRect();
+  var guideRect = guideEl.getBoundingClientRect();
+  var gx = guideRect.left - canvasRect.left;
+  var gy = guideRect.top - canvasRect.top;
+  var gw = guideRect.width, gh = guideRect.height;
+
+  // Map the on-screen guide box back into the video's native pixel space -
+  // this is the region we decode, while the preview itself stays un-zoomed.
+  var vx = (gx - offsetX) / scale;
+  var vy = (gy - offsetY) / scale;
+  var vwid = gw / scale;
+  var vhei = gh / scale;
+  vx = Math.max(0, Math.min(vx, vw));
+  vy = Math.max(0, Math.min(vy, vh));
+  vwid = Math.max(10, Math.min(vwid, vw - vx));
+  vhei = Math.max(10, Math.min(vhei, vh - vy));
+
+  return {
+    scale: scale, offsetX: offsetX, offsetY: offsetY,
+    crop: { x: Math.round(vx), y: Math.round(vy), w: Math.round(vwid), h: Math.round(vhei) }
+  };
 }
 
 function startScanLoop(){
@@ -1499,22 +1519,26 @@ function startScanLoop(){
   var ctx = canvas.getContext("2d");
   var lastDecodeAt = 0;
   var decodeIntervalMs = 200;
+  scanDisplayMap = null;
 
   function frame(ts){
     if(!scanVideo){ return; }
     if(scanVideo.readyState < 2 || !scanVideo.videoWidth){ scanRAF = requestAnimationFrame(frame); return; }
     var vw = scanVideo.videoWidth, vh = scanVideo.videoHeight;
-    var crop = computeCrop(vw, vh);
 
     var dispW = canvas.clientWidth, dispH = canvas.clientHeight;
-    if(canvas.width !== dispW || canvas.height !== dispH){ canvas.width = dispW; canvas.height = dispH; }
-    var scale = Math.max(canvas.width / crop.w, canvas.height / crop.h);
-    var drawW = crop.w * scale, drawH = crop.h * scale;
-    ctx.drawImage(scanVideo, crop.x, crop.y, crop.w, crop.h, (canvas.width - drawW) / 2, (canvas.height - drawH) / 2, drawW, drawH);
+    if(canvas.width !== dispW || canvas.height !== dispH){
+      canvas.width = dispW; canvas.height = dispH; scanDisplayMap = null;
+    }
+    if(!scanDisplayMap) scanDisplayMap = computeDisplayAndGuideMap(vw, vh, canvas);
+    var m = scanDisplayMap;
+
+    // Draw the FULL camera frame, scaled to cover the screen like a normal preview - no zoom.
+    ctx.drawImage(scanVideo, 0, 0, vw, vh, m.offsetX, m.offsetY, vw*m.scale, vh*m.scale);
 
     if(!scanDecodeBusy && !scannerBusy && (ts - lastDecodeAt) > decodeIntervalMs){
       lastDecodeAt = ts;
-      decodeFromCrop(crop);
+      decodeFromCrop(m.crop);
     }
     scanRAF = requestAnimationFrame(frame);
   }
