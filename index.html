@@ -335,15 +335,6 @@ table.preview tr.hdr-row td{background:var(--navy);color:#fff;font-weight:700;}
   position:absolute;left:0;right:0;top:calc(58px + var(--safe-top));z-index:3;text-align:center;
   color:#FF9D8A;font-size:12.5px;font-weight:600;padding:0 24px;
 }
-.zoom-row{
-  position:absolute;left:0;right:0;z-index:3;display:flex;justify-content:center;gap:8px;
-  bottom:calc(112px + var(--safe-bottom));
-}
-.zoom-btn{
-  padding:8px 15px;border-radius:99px;border:1.5px solid rgba(255,255,255,.35);
-  background:rgba(10,14,26,.55);color:#EAF0FF;font-size:13px;font-weight:700;backdrop-filter:blur(4px);
-}
-.zoom-btn.active{background:#7FE0C0;color:#0B2A20;border-color:#7FE0C0;}
 #scannerOverlay.found .scan-frame-wrap .corner{border-color:#12996B;}
 #scannerOverlay.found .scan-frame-wrap .laser{display:none;}
 
@@ -403,6 +394,10 @@ table.preview tr.hdr-row td{background:var(--navy);color:#fff;font-weight:700;}
     <div class="field-row">
       <label>Mã hàng <span class="opt">(khuyến nghị)</span></label>
       <select id="mapMa"></select>
+    </div>
+    <div class="field-row">
+      <label>Mã tham chiếu <span class="opt">(nếu có cột riêng - dùng để tìm & quét mã)</span></label>
+      <select id="mapMaTC"></select>
     </div>
     <div class="field-row">
       <label>Tên hàng <span class="opt">(bắt buộc)</span></label>
@@ -509,12 +504,6 @@ table.preview tr.hdr-row td{background:var(--navy);color:#fff;font-weight:700;}
     <div class="scan-frame-wrap" id="scanFrame">
       <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
       <div class="laser"></div>
-    </div>
-    <div class="zoom-row" id="zoomRow">
-      <button type="button" class="zoom-btn" data-zoom="1">1×</button>
-      <button type="button" class="zoom-btn active" data-zoom="1.5">1.5×</button>
-      <button type="button" class="zoom-btn" data-zoom="2">2×</button>
-      <button type="button" class="zoom-btn" data-zoom="2.5">2.5×</button>
     </div>
     <div class="scan-status" id="scanStatus"></div>
     <div class="scan-hint">Đưa mã vạch vào giữa khung, cách camera 10–15cm
@@ -623,6 +612,7 @@ function fmtDateTime(d){
 /* ===================== HEADER ALIASES ===================== */
 var ALIASES = {
   ma: ["ma hang","ma sp","ma san pham","ma vach","barcode","sku","ma hh","ma"],
+  mathamchieu: ["ma tham chieu","ma tk","ma doi chieu","reference code","ref code","matc","ma tc"],
   ten: ["ten hang","ten sp","ten san pham","ten hang hoa","ten hh","ten"],
   nganh1: ["nganh hang","nganh hang cap 1","danh muc","danh muc cap 1","nhom hang","nhom hang cap 1","category","nganh"],
   nganh2: ["nganh hang cap 2","danh muc cap 2","nhom hang cap 2","sub category","subcategory"],
@@ -847,6 +837,7 @@ function renderMappingSelects(){
   var headers = currentHeaders();
   var fields = [
     {key:"ma", sel:"#mapMa", required:false},
+    {key:"mathamchieu", sel:"#mapMaTC", required:false},
     {key:"ten", sel:"#mapTen", required:true},
     {key:"nganh1", sel:"#mapNganh1", required:false},
     {key:"nganh2", sel:"#mapNganh2", required:false},
@@ -872,6 +863,7 @@ $("#btnStartCheck").addEventListener("click", function(){
 
   var mapping = {
     ma: parseInt($("#mapMa").value,10),
+    mathamchieu: parseInt($("#mapMaTC").value,10),
     ten: tenIdx,
     nganh1: parseInt($("#mapNganh1").value,10),
     nganh2: parseInt($("#mapNganh2").value,10),
@@ -891,6 +883,7 @@ $("#btnStartCheck").addEventListener("click", function(){
     var p = {
       id: uid(),
       ma: ma!==undefined&&ma!==null ? ma.toString().trim() : "",
+      maThamChieu: mapping.mathamchieu>-1 && row[mapping.mathamchieu]!==undefined && row[mapping.mathamchieu]!==null ? row[mapping.mathamchieu].toString().trim() : "",
       ten: ten!==undefined&&ten!==null ? ten.toString().trim() : "(Không tên)",
       nganh1: mapping.nganh1>-1 && row[mapping.nganh1]!==undefined && row[mapping.nganh1]!=="" ? row[mapping.nganh1].toString().trim() : "Chưa phân loại",
       nganh2: mapping.nganh2>-1 && row[mapping.nganh2]!==undefined ? row[mapping.nganh2].toString().trim() : "",
@@ -913,7 +906,7 @@ $("#btnStartCheck").addEventListener("click", function(){
 });
 
 function buildSearchIdx(p){
-  return normalize([p.ma, p.ten, p.nganh1, p.nganh2].join(" "));
+  return normalize([p.ma, p.maThamChieu, p.ten, p.nganh1, p.nganh2].join(" "));
 }
 
 /* ===================== MAIN SCREEN ===================== */
@@ -1021,7 +1014,7 @@ function buildProductRows(){
       '<div class="row-spine"></div>'+
       '<div class="row-main">'+
         '<div class="row-title">'+escapeHtml(p.ten)+'</div>'+
-        '<div class="row-sub">'+(p.ma?escapeHtml(p.ma)+" · ":"")+(p.dvt?escapeHtml(p.dvt)+" · ":"")+'Tồn: <b class="ton">'+p.ton+'</b></div>'+
+        '<div class="row-sub">'+(p.ma?escapeHtml(p.ma)+" · ":"")+(p.maThamChieu?"TC:"+escapeHtml(p.maThamChieu)+" · ":"")+(p.dvt?escapeHtml(p.dvt)+" · ":"")+'Tồn: <b class="ton">'+p.ton+'</b></div>'+
         '<div class="row-badge"></div>'+
       '</div>'+
       '<div class="row-qty">'+
@@ -1346,13 +1339,13 @@ $("#btnMenu").addEventListener("click", function(){
 $("#btnExport").addEventListener("click", exportExcel);
 function exportExcel(){
   if(!state.products.length){ toast("Chưa có dữ liệu để xuất."); return; }
-  var detailHeader = ["Mã hàng","Tên hàng","Ngành hàng cấp 1","Ngành hàng cấp 2","ĐVT","Tồn hệ thống","SL kiểm thực tế","Chênh lệch","Trạng thái","Đã chốt","Thời gian chốt"];
+  var detailHeader = ["Mã hàng","Mã tham chiếu","Tên hàng","Ngành hàng cấp 1","Ngành hàng cấp 2","ĐVT","Tồn hệ thống","SL kiểm thực tế","Chênh lệch","Trạng thái","Đã chốt","Thời gian chốt"];
   var statusLabel = {khop:"Khớp", thieu:"Thiếu", thua:"Thừa", chuakiem:"Chưa kiểm"};
   var detailRows = state.products.map(function(p){
     var st = statusOf(p);
-    var sl = p.slKiem===null ? "" : p.slKiem;
-    var lech = p.slKiem===null ? "" : (p.slKiem - p.ton);
-    return [p.ma, p.ten, p.nganh1, p.nganh2, p.dvt, p.ton, sl, lech, statusLabel[st], p.isChot?"Có":"Không", p.chotAt||""];
+    var sl = p.slKiem === null ? "" : p.slKiem;
+    var lech = p.slKiem === null ? "" : (p.slKiem - p.ton);
+    return [p.ma, p.maThamChieu, p.ten, p.nganh1, p.nganh2, p.dvt, p.ton, sl, lech, statusLabel[st], p.isChot?"Có":"Không", p.chotAt||""];
   });
 
   var catMap = {};
@@ -1388,7 +1381,7 @@ function exportExcel(){
 
   var wb = XLSX.utils.book_new();
   var ws1 = XLSX.utils.aoa_to_sheet([detailHeader].concat(detailRows));
-  ws1["!cols"] = [{wch:14},{wch:32},{wch:18},{wch:16},{wch:8},{wch:12},{wch:14},{wch:12},{wch:12},{wch:9},{wch:16}];
+  ws1["!cols"] = [{wch:14},{wch:16},{wch:32},{wch:18},{wch:16},{wch:8},{wch:12},{wch:14},{wch:12},{wch:12},{wch:9},{wch:16}];
   XLSX.utils.book_append_sheet(wb, ws1, "Chi tiet kiem ke");
 
   var ws2 = XLSX.utils.aoa_to_sheet([summaryHeader].concat(summaryRows));
@@ -1443,7 +1436,7 @@ setTimeout(function(){ ensureZxingReady().catch(function(){}); }, 600);
 var RETAIL_FORMATS = ["EAN13","EAN8","UPCA","UPCE","Code128","Code39","Code93","Codabar","ITF","QRCode","DataMatrix","Aztec","PDF417"];
 
 var scanStream = null, scanTrack = null, scanVideo = null, scanRAF = null;
-var scanDecodeBusy = false, scanZoom = 1.5, torchOn = false;
+var scanDecodeBusy = false, torchOn = false;
 var decodeCanvasEl = null;
 
 function openScanner(){
@@ -1491,9 +1484,9 @@ function openScanner(){
 }
 
 function computeCrop(vw, vh){
-  var cropW = Math.round(vw / scanZoom);
+  var cropW = Math.round(vw * 0.96);
   var cropH = Math.round(cropW / 2.4);
-  if(cropH > vh / scanZoom){ cropH = Math.round(vh / scanZoom); }
+  if(cropH > vh){ cropH = vh; }
   cropW = Math.min(cropW, vw);
   cropH = Math.min(cropH, vh);
   var cropX = Math.round((vw - cropW) / 2);
@@ -1592,13 +1585,6 @@ $("#btnTorch").addEventListener("click", function(){
   });
 });
 
-$all(".zoom-btn", $("#zoomRow")).forEach(function(btn){
-  btn.addEventListener("click", function(){
-    scanZoom = parseFloat(btn.dataset.zoom);
-    $all(".zoom-btn", $("#zoomRow")).forEach(function(b){ b.classList.toggle("active", b===btn); });
-  });
-});
-
 function onScanDecoded(decodedText){
   var now = Date.now();
   if(scannerBusy) return;
@@ -1627,7 +1613,7 @@ function handleScannedCode(code){
   runSearch();
 
   var normCode = normalize(code);
-  var exact = state.products.filter(function(p){ return normalize(p.ma)===normCode; });
+  var exact = state.products.filter(function(p){ return normalize(p.ma)===normCode || normalize(p.maThamChieu)===normCode; });
   var candidates = exact.length ? exact : state.products.filter(function(p){ return p.searchIdx.indexOf(normCode)>-1; });
 
   if(candidates.length===0){
@@ -1685,40 +1671,59 @@ window.addEventListener("resize", applyFabPos);
 
 (function initFabDrag(){
   var fab = $("#btnScan");
-  var dragState = null;
+  var dragging = false, moved = false;
+  var startX=0, startY=0, origLeft=0, origTop=0;
   var suppressClick = false;
 
-  fab.addEventListener("pointerdown", function(e){
+  function point(e){
+    if(e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if(e.changedTouches && e.changedTouches.length) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+    return { x: e.clientX, y: e.clientY };
+  }
+  function onStart(e){
+    var p = point(e);
     var rect = fab.getBoundingClientRect();
-    dragState = { startX:e.clientX, startY:e.clientY, origLeft:rect.left, origTop:rect.top, moved:false };
-    try{ fab.setPointerCapture(e.pointerId); }catch(err){}
-  });
-  fab.addEventListener("pointermove", function(e){
-    if(!dragState) return;
-    var dx = e.clientX-dragState.startX, dy = e.clientY-dragState.startY;
-    if(!dragState.moved && (Math.abs(dx)>7 || Math.abs(dy)>7)){
-      dragState.moved = true;
+    dragging = true; moved = false;
+    startX = p.x; startY = p.y; origLeft = rect.left; origTop = rect.top;
+  }
+  function onMove(e){
+    if(!dragging) return;
+    var p = point(e);
+    var dx = p.x-startX, dy = p.y-startY;
+    if(!moved && (Math.abs(dx)>6 || Math.abs(dy)>6)){
+      moved = true;
       fab.classList.add("dragging");
     }
-    if(dragState.moved){
-      var pos = clampFabPos(dragState.origLeft+dx, dragState.origTop+dy);
+    if(moved){
+      if(e.cancelable) e.preventDefault();
+      var pos = clampFabPos(origLeft+dx, origTop+dy);
       fab.style.left = pos.left+"px";
       fab.style.top = pos.top+"px";
       fab.style.right = "auto";
       fab.style.bottom = "auto";
     }
-  });
-  function endDrag(e){
-    if(dragState && dragState.moved){
+  }
+  function onEnd(){
+    if(!dragging) return;
+    dragging = false;
+    if(moved){
       var rect = fab.getBoundingClientRect();
       saveFabPos({ xPct: rect.left/window.innerWidth, yPct: rect.top/window.innerHeight });
       fab.classList.remove("dragging");
       suppressClick = true;
     }
-    dragState = null;
   }
-  fab.addEventListener("pointerup", endDrag);
-  fab.addEventListener("pointercancel", endDrag);
+
+  fab.addEventListener("touchstart", onStart, {passive:true});
+  fab.addEventListener("touchmove", onMove, {passive:false});
+  fab.addEventListener("touchend", onEnd);
+  fab.addEventListener("touchcancel", onEnd);
+
+  // Fallback for mouse/trackpad (desktop browsers, testing)
+  fab.addEventListener("mousedown", function(e){ onStart(e); });
+  document.addEventListener("mousemove", function(e){ if(dragging) onMove(e); });
+  document.addEventListener("mouseup", function(e){ onEnd(e); });
+
   fab.addEventListener("click", function(e){
     if(suppressClick){ suppressClick=false; e.preventDefault(); e.stopPropagation(); return; }
     if(LS_OK && !localStorage.getItem(FAB_HINT_KEY)){
