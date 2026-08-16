@@ -284,10 +284,15 @@ table.preview tr.hdr-row td{background:var(--navy);color:#fff;font-weight:700;}
   background:linear-gradient(155deg,#2A5FE0,#1B3FA0);
   box-shadow:0 10px 24px rgba(20,50,140,.38),0 2px 6px rgba(0,0,0,.15);
   display:flex;align-items:center;justify-content:center;
+  touch-action:none;transition:box-shadow .15s, transform .1s;
 }
-.fab-scan svg{width:26px;height:26px;stroke:#fff;fill:none;}
+.fab-scan svg{width:26px;height:26px;stroke:#fff;fill:none;pointer-events:none;}
 .fab-scan:active{transform:scale(.94);}
 .fab-scan.hide{display:none;}
+.fab-scan.dragging{
+  box-shadow:0 16px 34px rgba(20,50,140,.5),0 4px 10px rgba(0,0,0,.25);
+  transform:scale(1.1);transition:none;
+}
 
 /* ---------- Scanner overlay ---------- */
 #scannerOverlay{
@@ -304,11 +309,12 @@ table.preview tr.hdr-row td{background:var(--navy);color:#fff;font-weight:700;}
   display:flex;align-items:center;justify-content:center;
 }
 .scan-topbar .close-scan svg{width:17px;height:17px;stroke:#fff;}
+.scan-topbar .close-scan.on{background:#E7A93C;}
 #qr-reader{position:absolute;inset:0;}
 #qr-reader video{width:100%!important;height:100%!important;object-fit:cover;}
 .scan-frame-wrap{
-  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-  width:74%;max-width:340px;aspect-ratio:1.5/1;z-index:3;pointer-events:none;
+  position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);
+  width:86%;max-width:420px;aspect-ratio:2.4/1;z-index:3;pointer-events:none;
 }
 .scan-frame-wrap .corner{position:absolute;width:26px;height:26px;border:3px solid #7FE0C0;}
 .scan-frame-wrap .tl{top:0;left:0;border-right:none;border-bottom:none;border-radius:6px 0 0 0;}
@@ -481,9 +487,14 @@ table.preview tr.hdr-row td{background:var(--navy);color:#fff;font-weight:700;}
   <div id="scannerOverlay">
     <div class="scan-topbar">
       <div class="t">Quét mã vạch sản phẩm</div>
-      <button class="close-scan" id="btnCloseScan" type="button">
-        <svg viewBox="0 0 24 24" stroke-width="2.4" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
-      </button>
+      <div style="display:flex;gap:8px;">
+        <button class="close-scan" id="btnTorch" type="button" style="display:none;" aria-label="Đèn pin">
+          <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15 14a5 5 0 1 0-6 0v3h6v-3Z"/></svg>
+        </button>
+        <button class="close-scan" id="btnCloseScan" type="button">
+          <svg viewBox="0 0 24 24" stroke-width="2.4" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+        </button>
+      </div>
     </div>
     <div id="qr-reader"></div>
     <div class="scan-frame-wrap" id="scanFrame">
@@ -491,8 +502,8 @@ table.preview tr.hdr-row td{background:var(--navy);color:#fff;font-weight:700;}
       <div class="laser"></div>
     </div>
     <div class="scan-status" id="scanStatus"></div>
-    <div class="scan-hint">Đưa mã vạch vào giữa khung
-      <span class="sub">Nhận mọi loại mã: EAN, UPC, Code128, Code39, QR…</span>
+    <div class="scan-hint">Đưa mã vạch vào giữa khung, cách camera 10–15cm
+      <span class="sub">Giữ máy ổn định, đủ sáng • Nhận mọi loại mã: EAN, UPC, Code128, Code39, QR…</span>
     </div>
   </div>
 </div>
@@ -1281,6 +1292,7 @@ $("#btnMenu").addEventListener("click", function(){
       '<div class="field-row"><label>Người kiểm <span class="opt">(hiện trong file xuất)</span></label><input type="text" class="text-input" id="editCheckerName" value="'+escapeHtml(state.checkerName)+'" placeholder="Tên nhân viên kiểm"></div>'+
       '<button class="btn block" id="btnSaveMeta" style="margin-bottom:10px;">Lưu thông tin</button>'+
       '<button class="btn ghost block" id="btnExportMenu" style="margin-bottom:10px;">Xuất file Excel kết quả</button>'+
+      '<button class="btn ghost block" id="btnResetFab" style="margin-bottom:10px;">Đặt lại vị trí nút quét mã</button>'+
       '<button class="btn ghost block" id="btnNewSession" style="margin-bottom:10px;">Bắt đầu phiên kiểm mới</button>'+
       '<button class="btn danger block" id="btnDeleteSession">Xoá phiên kiểm này</button>'+
     '</div>';
@@ -1294,6 +1306,11 @@ $("#btnMenu").addEventListener("click", function(){
     closeModal();
   });
   $("#btnExportMenu").addEventListener("click", function(){ closeModal(); exportExcel(); });
+  $("#btnResetFab").addEventListener("click", function(){
+    resetFabPos();
+    closeModal();
+    toast("Đã đặt lại vị trí nút quét.");
+  });
   $("#btnNewSession").addEventListener("click", function(){
     closeModal();
     renderSessionList();
@@ -1403,35 +1420,80 @@ function openScanner(){
   overlay.classList.remove("found");
   overlay.classList.add("show");
   $("#scanStatus").textContent = "";
+  $("#btnTorch").style.display = "none";
+  $("#btnTorch").classList.remove("on");
+  torchOn = false;
   scannerBusy = false;
   scannerLastCode = null;
   scannerLastAt = 0;
 
   scannerCtl = new Html5Qrcode("qr-reader", {
     formatsToSupport: allBarcodeFormats(),
+    useBarCodeDetectorIfSupported: true,
     verbose: false
   });
 
+  // Wide, thin scan box matches the shape of a 1D barcode far better than a square,
+  // and crops the frame tighter around it, which meaningfully improves decode success.
   var config = {
-    fps: 12,
+    fps: 8,
     qrbox: function(vw, vh){
-      var size = Math.floor(Math.min(vw, vh) * 0.72);
-      return { width: size, height: Math.floor(size*0.62) };
+      var w = Math.min(Math.floor(vw*0.86), 420);
+      var h = Math.floor(w/2.4);
+      return { width: w, height: h };
     },
-    aspectRatio: 1.777,
     disableFlip: false
   };
 
+  // Ask for the highest resolution the back camera offers - more pixels across the
+  // barcode's bars is the single biggest lever for reliable 1D-barcode decoding.
+  var videoConstraints = {
+    facingMode: "environment",
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    advanced: [{ focusMode: "continuous" }]
+  };
+
   scannerCtl.start(
-    { facingMode: "environment" },
+    videoConstraints,
     config,
     onScanDecoded,
     function(){ /* per-frame decode failure - ignore, this fires constantly while aiming */ }
-  ).catch(function(err){
-    $("#scanStatus").textContent = "Không mở được camera. Kiểm tra quyền truy cập camera cho trình duyệt.";
-    console.error(err);
+  ).then(function(){
+    setupTorchButton();
+  }).catch(function(err){
+    // Some iOS Safari versions reject "advanced" focus constraints outright - retry plainly.
+    scannerCtl.start(
+      { facingMode: "environment", width:{ideal:1920}, height:{ideal:1080} },
+      config, onScanDecoded, function(){}
+    ).then(function(){
+      setupTorchButton();
+    }).catch(function(err2){
+      $("#scanStatus").textContent = "Không mở được camera. Kiểm tra quyền truy cập camera cho trình duyệt.";
+      console.error(err2);
+    });
   });
 }
+
+var torchOn = false;
+function setupTorchButton(){
+  try{
+    var caps = scannerCtl.getRunningTrackCapabilities();
+    if(caps && caps.torch){
+      $("#btnTorch").style.display = "flex";
+    }
+  }catch(e){ /* capability check unsupported on this browser - just hide the button */ }
+}
+$("#btnTorch").addEventListener("click", function(){
+  if(!scannerCtl) return;
+  torchOn = !torchOn;
+  scannerCtl.applyVideoConstraints({ advanced:[{ torch: torchOn }] }).then(function(){
+    $("#btnTorch").classList.toggle("on", torchOn);
+  }).catch(function(){
+    toast("Đèn pin không khả dụng trên thiết bị này.");
+    torchOn = false;
+  });
+});
 
 function closeScanner(){
   var overlay = $("#scannerOverlay");
@@ -1495,8 +1557,89 @@ function handleScannedCode(code){
   }
 }
 
-$("#btnScan").addEventListener("click", openScanner);
-$("#btnCloseScan").addEventListener("click", closeScanner);
+/* ---- Draggable scan button: hold and drag anywhere on screen, position remembered ---- */
+var FAB_POS_KEY = STORAGE_PREFIX + "fabPos";
+var FAB_HINT_KEY = STORAGE_PREFIX + "fabHintShown";
+function loadFabPos(){
+  if(!LS_OK) return null;
+  try{ var raw = localStorage.getItem(FAB_POS_KEY); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+}
+function saveFabPos(pos){
+  if(!LS_OK) return;
+  try{ localStorage.setItem(FAB_POS_KEY, JSON.stringify(pos)); }catch(e){}
+}
+function clampFabPos(left, top){
+  var fab = $("#btnScan");
+  var size = fab.offsetWidth || 62;
+  var margin = 8;
+  var maxLeft = window.innerWidth - size - margin;
+  var maxTop = window.innerHeight - size - margin;
+  return { left: Math.min(Math.max(left, margin), Math.max(margin,maxLeft)), top: Math.min(Math.max(top, margin), Math.max(margin,maxTop)) };
+}
+function applyFabPos(){
+  var fab = $("#btnScan");
+  var pos = loadFabPos();
+  if(!pos) return;
+  var abs = clampFabPos(pos.xPct*window.innerWidth, pos.yPct*window.innerHeight);
+  fab.style.left = abs.left+"px";
+  fab.style.top = abs.top+"px";
+  fab.style.right = "auto";
+  fab.style.bottom = "auto";
+}
+function resetFabPos(){
+  if(LS_OK){ try{ localStorage.removeItem(FAB_POS_KEY); }catch(e){} }
+  var fab = $("#btnScan");
+  fab.style.left = ""; fab.style.top = ""; fab.style.right = ""; fab.style.bottom = "";
+}
+window.addEventListener("resize", applyFabPos);
+
+(function initFabDrag(){
+  var fab = $("#btnScan");
+  var dragState = null;
+  var suppressClick = false;
+
+  fab.addEventListener("pointerdown", function(e){
+    var rect = fab.getBoundingClientRect();
+    dragState = { startX:e.clientX, startY:e.clientY, origLeft:rect.left, origTop:rect.top, moved:false };
+    try{ fab.setPointerCapture(e.pointerId); }catch(err){}
+  });
+  fab.addEventListener("pointermove", function(e){
+    if(!dragState) return;
+    var dx = e.clientX-dragState.startX, dy = e.clientY-dragState.startY;
+    if(!dragState.moved && (Math.abs(dx)>7 || Math.abs(dy)>7)){
+      dragState.moved = true;
+      fab.classList.add("dragging");
+    }
+    if(dragState.moved){
+      var pos = clampFabPos(dragState.origLeft+dx, dragState.origTop+dy);
+      fab.style.left = pos.left+"px";
+      fab.style.top = pos.top+"px";
+      fab.style.right = "auto";
+      fab.style.bottom = "auto";
+    }
+  });
+  function endDrag(e){
+    if(dragState && dragState.moved){
+      var rect = fab.getBoundingClientRect();
+      saveFabPos({ xPct: rect.left/window.innerWidth, yPct: rect.top/window.innerHeight });
+      fab.classList.remove("dragging");
+      suppressClick = true;
+    }
+    dragState = null;
+  }
+  fab.addEventListener("pointerup", endDrag);
+  fab.addEventListener("pointercancel", endDrag);
+  fab.addEventListener("click", function(e){
+    if(suppressClick){ suppressClick=false; e.preventDefault(); e.stopPropagation(); return; }
+    if(LS_OK && !localStorage.getItem(FAB_HINT_KEY)){
+      try{ localStorage.setItem(FAB_HINT_KEY,"1"); }catch(err){}
+      toast("Mẹo: giữ và kéo nút này tới vị trí thuận tay bạn.");
+    }
+    openScanner();
+  });
+
+  applyFabPos();
+})();
 
 /* ===================== INIT ===================== */
 renderSessionList();
