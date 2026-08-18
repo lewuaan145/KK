@@ -217,7 +217,10 @@ table.preview tr.hdr-row td{background:var(--navy);color:#fff;font-weight:700;}
 .row-badge.st-thua{color:var(--warn);}
 .row-badge.st-chuakiem{color:var(--muted-2);}
 
-.row-qty{flex:none;display:flex;align-items:center;gap:0;padding:8px 8px;border-left:1px solid var(--line);}
+.row-qty{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 8px;border-left:1px solid var(--line);}
+.qty-badge{font-size:9.5px;font-weight:700;color:var(--muted-2);letter-spacing:.01em;white-space:nowrap;}
+.qty-badge b{color:var(--navy);font-size:10.5px;}
+.qty-controls{display:flex;align-items:center;}
 .qtybtn{
   width:32px;height:32px;border-radius:8px;border:none;background:var(--gray-bg);color:var(--navy);
   font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;
@@ -229,8 +232,6 @@ table.preview tr.hdr-row td{background:var(--navy);color:#fff;font-weight:700;}
   color:var(--navy);padding:0 2px;
 }
 .qtyinput:focus{outline:none;}
-.row.locked .qtybtn{opacity:.3;pointer-events:none;}
-.row.locked .qtyinput{color:var(--muted-2);}
 .lock-icon{width:13px;height:13px;stroke:var(--muted-2);flex:none;margin-left:2px;}
 
 #emptyState{flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;padding:40px 30px;text-align:center;color:var(--muted);}
@@ -276,6 +277,24 @@ table.preview tr.hdr-row td{background:var(--navy);color:#fff;font-weight:700;}
 .summary-cell{background:var(--bg);border-radius:11px;padding:12px;text-align:center;}
 .summary-cell .v{font-size:20px;font-weight:800;color:var(--navy);}
 .summary-cell .l{font-size:11px;color:var(--muted);font-weight:600;margin-top:2px;}
+
+.qa-current{
+  background:var(--bg);border-radius:11px;padding:12px 14px;font-size:14px;color:var(--muted);
+  margin-bottom:14px;font-weight:600;
+}
+.qa-current b{color:var(--navy);font-size:16px;}
+.qa-quick-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.qa-chip{
+  flex:1;min-width:60px;padding:11px 8px;border-radius:10px;border:1.5px solid var(--line);
+  background:#fff;color:var(--accent-ink);font-size:14.5px;font-weight:800;
+}
+.qa-chip:active{background:var(--gray-bg);}
+.qa-input{font-size:20px!important;font-weight:800;text-align:center;letter-spacing:.02em;}
+.qa-result{
+  background:var(--good-bg);border-radius:11px;padding:12px 14px;font-size:14px;color:var(--good);
+  margin-bottom:4px;font-weight:700;text-align:center;
+}
+.qa-result b{font-size:19px;}
 
 /* ---------- Scan FAB ---------- */
 .fab-scan{
@@ -471,7 +490,6 @@ table.preview tr.hdr-row td{background:var(--navy);color:#fff;font-weight:700;}
 
     <div id="listMeta">
       <span id="listMetaText">0 sản phẩm</span>
-      <button id="btnChotKiem" type="button">Chốt kiểm →</button>
     </div>
 
     <div id="productList"></div>
@@ -555,12 +573,11 @@ var state = {
   sessionId: null,
   sessionName: "",
   checkerName: "",
-  products: [],           // {id, ma, ten, nganh1, nganh2, dvt, ton, slKiem, isChot, chotAt, searchIdx}
-  rowEls: {},             // id -> {row, qtyInput, badge}
+  products: [],           // {id, ma, maThamChieu, ten, nganh1, nganh2, dvt, ton, slKiem, searchIdx}
+  rowEls: {},             // id -> {row, qtyInput, badge, qtyBadge}
   filterStatus: "all",
   filterCategory: "__all__",
-  searchTokens: [],
-  chotContext: "all"      // "all" or category name, set when opening chot modal
+  searchTokens: []
 };
 
 /* ===================== HELPERS ===================== */
@@ -889,9 +906,7 @@ $("#btnStartCheck").addEventListener("click", function(){
       nganh2: mapping.nganh2>-1 && row[mapping.nganh2]!==undefined ? row[mapping.nganh2].toString().trim() : "",
       dvt: mapping.dvt>-1 && row[mapping.dvt]!==undefined ? row[mapping.dvt].toString().trim() : "",
       ton: toNumber(mapping.ton>-1 ? row[mapping.ton] : 0),
-      slKiem: null,
-      isChot: false,
-      chotAt: null
+      slKiem: null
     };
     p.searchIdx = buildSearchIdx(p);
     products.push(p);
@@ -953,7 +968,6 @@ function renderCategoryChips(){
       state.filterCategory = btn.dataset.cat;
       renderCategoryChips();
       applyFilters();
-      updateListMetaChotLabel();
     });
   });
 }
@@ -1018,24 +1032,31 @@ function buildProductRows(){
         '<div class="row-badge"></div>'+
       '</div>'+
       '<div class="row-qty">'+
-        '<button type="button" class="qtybtn minus" data-act="minus">−</button>'+
-        '<input class="qtyinput" type="text" inputmode="numeric" pattern="[0-9]*" value="">'+
-        '<button type="button" class="qtybtn plus" data-act="plus">+</button>'+
+        '<div class="qty-badge">Chưa kiểm</div>'+
+        '<div class="qty-controls">'+
+          '<button type="button" class="qtybtn minus" data-act="minus">−</button>'+
+          '<input class="qtyinput" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" value="">'+
+          '<button type="button" class="qtybtn plus" data-act="plus">+</button>'+
+        '</div>'+
       '</div>';
     frag.appendChild(row);
     state.rowEls[p.id] = {
       row: row,
       qtyInput: row.querySelector(".qtyinput"),
-      badge: row.querySelector(".row-badge")
+      badge: row.querySelector(".row-badge"),
+      qtyBadge: row.querySelector(".qty-badge")
     };
     syncRowVisual(p);
   });
   list.appendChild(frag);
 
-  // Event delegation: buttons (+/-) with long-press repeat
+  // Event delegation: buttons (+/-) adjust the pending (0-based) entry.
+  // "focusout" (not "blur") is used because blur doesn't bubble - this lets us flush
+  // any pending commit immediately the moment a field loses focus.
   list.addEventListener("click", onListClick);
   list.addEventListener("input", onQtyInput);
-  list.addEventListener("change", onQtyChange);
+  list.addEventListener("focusout", onQtyFlush);
+  list.addEventListener("keydown", onQtyKeydown);
   list.addEventListener("pointerdown", onQtyPointerDown);
   document.addEventListener("pointerup", onQtyPointerUp);
   document.addEventListener("pointercancel", onQtyPointerUp);
@@ -1055,28 +1076,48 @@ function syncRowVisual(p){
   var refs = state.rowEls[p.id];
   if(!refs) return;
   var st = statusOf(p);
-  refs.row.className = "row status-"+st + (p.isChot ? " locked" : "");
-  refs.qtyInput.value = (p.slKiem===null||p.slKiem===undefined) ? "" : p.slKiem;
-  refs.qtyInput.disabled = !!p.isChot;
+  refs.row.className = "row status-"+st;
+  refs.qtyInput.value = "";
   var badgeText = {
     khop:"KHỚP", thieu:"THIẾU "+(p.ton-p.slKiem), thua:"THỪA "+(p.slKiem-p.ton), chuakiem:"CHƯA KIỂM"
   }[st];
-  refs.badge.textContent = badgeText + (p.isChot ? " · Đã chốt" : "");
+  refs.badge.textContent = badgeText;
   refs.badge.className = "row-badge st-"+st;
+  refs.qtyBadge.innerHTML = (p.slKiem===null) ? "Chưa kiểm" : "Đã kiểm <b>"+p.slKiem+"</b>";
 }
 
-function setQty(p, val, opts){
-  opts = opts||{};
-  if(p.isChot && !opts.force) return;
-  var n = val;
-  if(n===null){ p.slKiem = null; }
-  else{
-    n = Math.max(0, Math.round(toNumber(n)));
-    p.slKiem = n;
+// Everything is live - there is no separate "chốt" step. Whatever is typed or tapped
+// into a row's entry field gets folded into that product's running total (slKiem)
+// automatically, after a short pause, and the Thiếu/Thừa/Khớp status updates right away.
+var qtyCommitTimers = {}; // productId -> timeout id
+var TYPE_COMMIT_DELAY = 550;  // typing: commits shortly after you stop, feels immediate
+var BTN_COMMIT_DELAY = 1000;  // +/- taps: waits ~1s after the last tap before committing
+
+function commitEntry(p, input){
+  var addN = parseInt(input.value || "0", 10) || 0;
+  if(addN !== 0){
+    var cur = p.slKiem===null ? 0 : p.slKiem;
+    p.slKiem = cur + addN;
+    updateHeaderStats();
+    schedulePersist();
   }
   syncRowVisual(p);
-  updateHeaderStats();
-  schedulePersist();
+}
+function scheduleCommit(p, input, delay){
+  clearTimeout(qtyCommitTimers[p.id]);
+  qtyCommitTimers[p.id] = setTimeout(function(){
+    commitEntry(p, input);
+  }, delay);
+}
+function flushCommit(p, input){
+  clearTimeout(qtyCommitTimers[p.id]);
+  commitEntry(p, input);
+}
+// If the user is mid-entry on some other row when they search or scan away,
+// flush that entry immediately rather than silently losing it or leaving it stuck.
+function commitActiveQtyInput(){
+  var el = document.activeElement;
+  if(el && el.classList && el.classList.contains("qtyinput")){ el.blur(); }
 }
 
 function onListClick(e){
@@ -1084,24 +1125,35 @@ function onListClick(e){
   if(!btn) return;
   var rowEl = e.target.closest(".row");
   var p = getProduct(rowEl.dataset.id);
-  if(!p || p.isChot) return;
+  if(!p) return;
+  var refs = state.rowEls[p.id];
   var delta = btn.dataset.act==="plus" ? 1 : -1;
-  var cur = p.slKiem===null ? 0 : p.slKiem;
-  setQty(p, cur+delta);
+  var cur = parseInt(refs.qtyInput.value || "0", 10) || 0;
+  var next = Math.max(0, cur + delta);
+  refs.qtyInput.value = next===0 ? "" : next.toString();
+  scheduleCommit(p, refs.qtyInput, BTN_COMMIT_DELAY);
 }
 function onQtyInput(e){
   var input = e.target;
   if(!input.classList.contains("qtyinput")) return;
   input.value = input.value.replace(/[^0-9]/g,"");
-}
-function onQtyChange(e){
-  var input = e.target;
-  if(!input.classList.contains("qtyinput")) return;
-  var rowEl = e.target.closest(".row");
+  var rowEl = input.closest(".row");
   var p = getProduct(rowEl.dataset.id);
   if(!p) return;
-  if(input.value===""){ setQty(p, null); }
-  else{ setQty(p, input.value); }
+  scheduleCommit(p, input, TYPE_COMMIT_DELAY);
+}
+function onQtyFlush(e){
+  var input = e.target;
+  if(!input.classList || !input.classList.contains("qtyinput")) return;
+  var rowEl = input.closest(".row");
+  var p = getProduct(rowEl.dataset.id);
+  if(!p) return;
+  flushCommit(p, input);
+}
+function onQtyKeydown(e){
+  if(e.key==="Enter" && e.target.classList && e.target.classList.contains("qtyinput")){
+    e.target.blur(); // triggers onQtyFlush via focusout
+  }
 }
 var pressTimer=null, pressInterval=null;
 function onQtyPointerDown(e){
@@ -1109,13 +1161,16 @@ function onQtyPointerDown(e){
   if(!btn) return;
   var rowEl = e.target.closest(".row");
   var p = getProduct(rowEl.dataset.id);
-  if(!p || p.isChot) return;
+  if(!p) return;
+  var refs = state.rowEls[p.id];
   var delta = btn.dataset.act==="plus" ? 1 : -1;
   clearTimeout(pressTimer); clearInterval(pressInterval);
   pressTimer = setTimeout(function(){
     pressInterval = setInterval(function(){
-      var cur = p.slKiem===null?0:p.slKiem;
-      setQty(p, cur+delta*5);
+      var cur = parseInt(refs.qtyInput.value || "0", 10) || 0;
+      var next = Math.max(0, cur + delta*5);
+      refs.qtyInput.value = next===0 ? "" : next.toString();
+      scheduleCommit(p, refs.qtyInput, BTN_COMMIT_DELAY);
     }, 110);
   }, 450);
 }
@@ -1141,12 +1196,6 @@ function applyFilters(){
   });
   $("#listMetaText").textContent = visibleCount + " sản phẩm";
   $("#emptyState").classList.toggle("show", visibleCount===0);
-  updateListMetaChotLabel();
-}
-
-function updateListMetaChotLabel(){
-  var label = state.filterCategory==="__all__" ? "Chốt kiểm toàn bộ →" : "Chốt kiểm: "+state.filterCategory+" →";
-  $("#btnChotKiem").textContent = label;
 }
 
 function updateHeaderStats(){
@@ -1183,6 +1232,7 @@ $("#statusChips").addEventListener("click", function(e){
 /* ---- Search: input element is NEVER recreated; only list rows toggle ---- */
 var searchDebounce=null;
 function runSearch(){
+  commitActiveQtyInput();
   var raw = $("#searchInput").value;
   $("#searchBar").classList.toggle("has-text", raw.length>0);
   state.searchTokens = normalize(raw).split(/\s+/).filter(Boolean);
@@ -1202,77 +1252,6 @@ $("#btnClearSearch").addEventListener("click", function(){
   runSearch();
   $("#searchInput").focus();
 });
-
-/* ===================== CHỐT KIỂM ===================== */
-$("#btnChotKiem").addEventListener("click", function(){
-  openChotModal(state.filterCategory);
-});
-function scopedProducts(cat){
-  if(cat==="__all__") return state.products;
-  return state.products.filter(function(p){ return (p.nganh1||"Chưa phân loại")===cat; });
-}
-function openChotModal(cat){
-  state.chotContext = cat;
-  var items = scopedProducts(cat);
-  var pending = items.filter(function(p){ return !p.isChot; });
-  var chuaKiem = pending.filter(function(p){ return p.slKiem===null; }).length;
-  var scopeName = cat==="__all__" ? "toàn bộ danh sách" : ('ngành hàng "'+cat+'"');
-
-  var html =
-    '<div class="modal-sheet">'+
-      '<div class="modal-title">Chốt kiểm '+escapeHtml(scopeName)+'</div>'+
-      '<div class="modal-sub">'+pending.length+' SKU sẽ được chốt'+(chuaKiem?(', trong đó <b>'+chuaKiem+'</b> SKU chưa nhập số lượng kiểm.'):'.')+'</div>'+
-      (chuaKiem ? (
-        '<label class="radio-opt checked" data-r="zero">'+
-          '<input type="radio" name="chotmode" value="zero" checked>'+
-          '<div><div class="t">Tính SKU chưa kiểm là 0</div><div class="d">Các sản phẩm chưa đếm sẽ được ghi nhận số lượng thực tế = 0 (thiếu toàn bộ tồn kho).</div></div>'+
-        '</label>'+
-        '<label class="radio-opt" data-r="skip">'+
-          '<input type="radio" name="chotmode" value="skip">'+
-          '<div><div class="t">Bỏ qua, giữ nguyên chưa kiểm</div><div class="d">Chỉ chốt các SKU đã nhập số lượng. SKU chưa kiểm vẫn mở để kiểm sau.</div></div>'+
-        '</label>'
-      ) : '') +
-      '<div class="modal-actions">'+
-        '<button class="btn ghost" id="chotCancel">Huỷ</button>'+
-        '<button class="btn" id="chotConfirm" style="flex:2;">Xác nhận chốt</button>'+
-      '</div>'+
-    '</div>';
-  openModal(html);
-  $all('.radio-opt', $("#modalRoot")).forEach(function(el){
-    el.addEventListener("click", function(){
-      $all('.radio-opt', $("#modalRoot")).forEach(function(o){ o.classList.remove("checked"); });
-      el.classList.add("checked");
-      el.querySelector('input').checked = true;
-    });
-  });
-  var cancelBtn = $("#chotCancel");
-  if(cancelBtn) cancelBtn.addEventListener("click", closeModal);
-  $("#chotConfirm").addEventListener("click", function(){
-    var mode = "zero";
-    var checkedRadio = $('input[name="chotmode"]:checked', $("#modalRoot"));
-    if(checkedRadio) mode = checkedRadio.value;
-    doChot(cat, mode);
-    closeModal();
-  });
-}
-function doChot(cat, mode){
-  var items = scopedProducts(cat);
-  var now = fmtDateTime();
-  var count=0;
-  items.forEach(function(p){
-    if(p.isChot) return;
-    if(p.slKiem===null){
-      if(mode==="zero"){ p.slKiem = 0; } else { return; }
-    }
-    p.isChot = true;
-    p.chotAt = now;
-    count++;
-    syncRowVisual(p);
-  });
-  updateHeaderStats();
-  persistSession();
-  toast("Đã chốt "+count+" sản phẩm.");
-}
 
 /* ===================== MODAL / MENU ===================== */
 function openModal(innerHtml){
@@ -1339,13 +1318,13 @@ $("#btnMenu").addEventListener("click", function(){
 $("#btnExport").addEventListener("click", exportExcel);
 function exportExcel(){
   if(!state.products.length){ toast("Chưa có dữ liệu để xuất."); return; }
-  var detailHeader = ["Mã hàng","Mã tham chiếu","Tên hàng","Ngành hàng cấp 1","Ngành hàng cấp 2","ĐVT","Tồn hệ thống","SL kiểm thực tế","Chênh lệch","Trạng thái","Đã chốt","Thời gian chốt"];
+  var detailHeader = ["Mã hàng","Mã tham chiếu","Tên hàng","Ngành hàng cấp 1","Ngành hàng cấp 2","ĐVT","Tồn hệ thống","SL kiểm thực tế","Chênh lệch","Trạng thái"];
   var statusLabel = {khop:"Khớp", thieu:"Thiếu", thua:"Thừa", chuakiem:"Chưa kiểm"};
   var detailRows = state.products.map(function(p){
     var st = statusOf(p);
     var sl = p.slKiem === null ? "" : p.slKiem;
     var lech = p.slKiem === null ? "" : (p.slKiem - p.ton);
-    return [p.ma, p.maThamChieu, p.ten, p.nganh1, p.nganh2, p.dvt, p.ton, sl, lech, statusLabel[st], p.isChot?"Có":"Không", p.chotAt||""];
+    return [p.ma, p.maThamChieu, p.ten, p.nganh1, p.nganh2, p.dvt, p.ton, sl, lech, statusLabel[st]];
   });
 
   var catMap = {};
@@ -1381,7 +1360,7 @@ function exportExcel(){
 
   var wb = XLSX.utils.book_new();
   var ws1 = XLSX.utils.aoa_to_sheet([detailHeader].concat(detailRows));
-  ws1["!cols"] = [{wch:14},{wch:16},{wch:32},{wch:18},{wch:16},{wch:8},{wch:12},{wch:14},{wch:12},{wch:12},{wch:9},{wch:16}];
+  ws1["!cols"] = [{wch:14},{wch:16},{wch:32},{wch:18},{wch:16},{wch:8},{wch:12},{wch:14},{wch:12},{wch:12}];
   XLSX.utils.book_append_sheet(wb, ws1, "Chi tiet kiem ke");
 
   var ws2 = XLSX.utils.aoa_to_sheet([summaryHeader].concat(summaryRows));
@@ -1442,6 +1421,7 @@ var decodeCanvasEl = null;
 var scannerOpening = false;
 
 function openScanner(){
+  commitActiveQtyInput();
   if(scannerOpening) return; // ignore rapid double-taps while a request is already in flight
   scannerOpening = true;
 
